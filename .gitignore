@@ -2,6 +2,8 @@
 __pycache__/
 *.pyc
 .env
+env.txt
+*.env
 firebase-service-account.json
 serviceAccountKey.json
 .DS_Store
