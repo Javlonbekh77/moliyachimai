@@ -1,0 +1,47 @@
+# Project Specification: AI Personal Finance & Expense Tracker Telegram Bot
+
+## 1. Project Overview & Goal
+Build a serverless Telegram Bot that allows users to track their personal income and expenses effortlessly using **10–30 second Uzbek/Russian/English voice messages** or **plain text messages**, as well as request financial summaries and analytical insights.
+
+The application must be 100% free-tier friendly, designed to be deployed on **Vercel** using **Webhooks**, and use **Firebase Firestore** for persistent user data storage.
+
+---
+
+## 2. Tech Stack & Architecture
+- **Language:** Python 3.11+
+- **Web Framework (Webhook Handler):** FastAPI
+- **Telegram Bot Framework:** `aiogram` (v3.x) running in **Webhook mode** (no polling).
+- **Audio Processing & Extraction AI:** **Google Gemini API** (`google-genai` SDK, using `gemini-3.5-flash` or `gemini-3.5-flash-lite` / `gemini-2.5-flash` with native multimodal audio input and Structured Outputs).
+- **Text Processing & Analytical Summaries AI:** **Groq API** (`groq` SDK, using `llama-3.3-70b-versatile` with JSON mode for fast text parsing and natural language financial insights).
+- **Database:** **Firebase Firestore** (`firebase-admin` SDK).
+- **Deployment:** **Vercel** (Serverless Functions).
+
+---
+
+## 3. Core Functional Requirements
+
+### A. Input Routing (Hybrid AI Pipeline)
+1. **Voice Messages (`message.voice`):**
+   - Download the `.ogg` voice file from Telegram directly into memory (`io.BytesIO`, do NOT save files to disk because Vercel's filesystem is read-only outside `/tmp`).
+   - Send the audio bytes directly to **Google Gemini API** with a strict system prompt and Pydantic JSON schema.
+   - Gemini must transcribe/understand the Uzbek context (including colloquial expressions like *"tushlikka 45 ming ketdi"*, *"kartamga 1 million tashlashdi"*, *"taksiga 18000 berdim"*) and extract **all** transactions mentioned in a single audio clip (a user might mention 3–4 expenses and 1 income in one 20-second audio).
+2. **Text Messages (`message.text`):**
+   - If the message is a command (`/start`, `/today`, `/month`, `/stats`, `/analyze`, `/delete_last`), handle via command handlers.
+   - If it is a natural language transaction log (e.g., *"non 5000, sut 12000"*), send it to **Groq API (`llama-3.3-70b-versatile`)** using JSON mode to extract structured transactions with ultra-low latency.
+   - If the user asks a financial question (e.g., *"Bu oy eng ko'p nimaga pul ishlatdim?"* or *"Xarajatlarimni tahlil qilib ber"*), fetch their recent transactions from Firestore and pass them to **Groq (`llama-3.3-70b-versatile`)** to generate a concise, actionable financial analysis in Uzbek.
+
+### B. Structured Extraction Schema (Both Gemini & Groq)
+Every extracted item must follow this JSON structure:
+```json
+{
+  "transactions": [
+    {
+      "type": "expense", // strictly "expense" or "income"
+      "amount": 45000,   // numeric value in UZS (convert "45 ming" -> 45000, "1.5 mln" -> 1500000)
+      "currency": "UZS", // default "UZS", detect "USD" if "$" or "dollar" is mentioned
+      "category": "Oziq-ovqat", // e.g., Oziq-ovqat, Transport, Kommunal, Salomatlik, Kiyim, Ta'lim, O'yin-kulgi, Maosh, Biznes, Boshqa
+      "description": "Tushlik" // brief clean description in Uzbek
+    }
+  ],
+  "is_query": false // true if the user is asking a question/analysis rather than logging a transaction
+}
